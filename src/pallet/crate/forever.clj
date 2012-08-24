@@ -106,7 +106,12 @@ https://github.com/nodejitsu/forever"
               "/ ) { print substr( $2, 2, length( $2 ) - 2 ) } }'")))))
 
 (defn forever-service
-  [session script & {:keys [action max instance-id script-name user]
+  "Operate a service via forever:
+
+:user   the user to run under
+:dir    the working directory for the code
+:action either :start or :stop"
+  [session script & {:keys [action max dir instance-id script-name user]
                      :or {action :start max 1 script-name "forever script"}}]
   (let [{:keys [home user] :as settings}
         (get-target-settings session :vblob instance-id ::no-settings)]
@@ -117,9 +122,18 @@ https://github.com/nodejitsu/forever"
        (str "Starting " script-name)
        ~(if user
           (stevedore/script
-           (sudo -n -H -u ~user (forever -m ~max start ~script)))
+           (sudo -n -H -u ~user sh -c
+                 (quoted
+                  (do
+                    "("
+                    ~(if dir (stevedore/script (cd ~dir)) "")
+                    (forever -m ~max start ~script)
+                    ")"))))
           (stevedore/script
-           (forever -m ~max start ~script))))
+           "("
+           ~(if dir (stevedore/script (cd ~dir)) "")
+           (forever -m ~max start ~script)
+           ")")))
       :stop
       (exec-checked-script
        session
