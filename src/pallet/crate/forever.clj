@@ -152,5 +152,5 @@ https://github.com/nodejitsu/forever"
   "Returns a service-spec for installing forever."
   [settings]
   (server-spec
-   :phase {:settings (phase-fn (forever-settings settings))
-           :configure (phase-fn (install-forever))}))
+   :phases {:settings (phase-fn (forever-settings settings))
+            :configure (phase-fn (install-forever))}))
