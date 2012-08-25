@@ -13,6 +13,7 @@ https://github.com/nodejitsu/forever"
    [pallet.core :only [server-spec]]
    [pallet.parameter :only [assoc-target-settings get-target-settings]]
    [pallet.phase :only [phase-fn]]
+   [pallet.script.lib :only [has-command?]]
    [pallet.thread-expr :only [when-> apply-map->]]
    [pallet.utils :only [apply-map]]
    [pallet.version-dispatch
@@ -81,7 +82,10 @@ https://github.com/nodejitsu/forever"
      (apply-map-> packages (:packages npm)))
    (exec-checked-script
     "Install forever"
-    (npm install (str "forever@" ~version) -g --quiet -y))))
+    (if (~has-command? forever)
+      ;; there doesn't seem to be a way of checking the forever version
+      (println "forever already installed, skipping")
+      (npm install (str "forever@" ~version) -g --quiet -y)))))
 
 (defn install-forever
   "Install forever. By default will build from source."
