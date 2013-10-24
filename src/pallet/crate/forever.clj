@@ -129,7 +129,7 @@ abuse the service name to pass the executable script."
              ~(forever service-name (assoc (select-keys options [:max :env])
                                       :action action))))
           (case action
-            ;; upstart reports an error if we try starting when already running
+            ;; forever reports an error if we try starting when already running
             :start
             (exec-checked-script
              (str (name action) " " service-name)
@@ -141,7 +141,7 @@ abuse the service name to pass the executable script."
                ~(forever service-name (assoc (select-keys options [:max :env])
                                         :action action))))
 
-            ;; upstart reports an error if we try stopping when not running
+            ;; forever reports an error if we try stopping when not running
             :stop
             (exec-checked-script
              (str (name action) " " service-name)
@@ -151,6 +151,20 @@ abuse the service name to pass the executable script."
                         ("grep" (quoted ~service-name))))
                ~(forever service-name (assoc (select-keys options [:max :env])
                                         :action action))))
+
+            ;; forever reports an error if we try restarting when not running
+            :restart
+            (exec-checked-script
+             (str (name action) " " service-name)
+             (if ((pipe
+                   ~(forever service-name
+                             (assoc (select-keys options [:max :env])
+                               :action :list))
+                   ("grep" (quoted ~service-name))))
+               ~(forever service-name (assoc (select-keys options [:max :env])
+                                        :action action))
+               ~(forever service-name (assoc (select-keys options [:max :env])
+                                        :action :start))))
 
             ;; otherwise, just perform the action
             (exec-checked-script
