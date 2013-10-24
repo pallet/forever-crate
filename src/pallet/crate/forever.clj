@@ -74,43 +74,20 @@ abuse the service name to pass the executable script."
   [{:keys [instance-id]}]
   (crate-install/install :forever instance-id))
 
-;;; # Forever based service
-;; (defn forever-index [script]
-;;   (stevedore/script
-;;    (pipe
-;;     ("forever" list)
-;;     (awk (str "'{ if ( $5 ~ /"
-;;               ~script
-;;               "/ ) { print substr( $2, 2, length( $2 ) - 2 ) } }'")))))
-
 (defn forever
   "Return a forever command for the specified arguments"
   [script {:keys [action max env instance-id]
            :or {action :start max 1}}]
-  (let [env-string (string/join " " (map (fn [var val]
+  (let [env-string (string/join " " (map (fn [[var val]]
                                            (str (name var) "=\"" val "\""))
                                          env))]
     (case action
-      :start (stevedore/fragment (~env-string forever -m ~max start ~script))
-      (stevedore/fragment (~env-string forever ~action ~script)))))
-
-(defn forever-service
-  "Operate a service via forever:
-
-:user   the user to run under
-:dir    the working directory for the code
-:action either :start or :stop"
-  [script & {:keys [action max instance-id script-name]
-             :or {action :start max 1 script-name "forever script"}
-             :as options}]
-  (case action
-    :start
-    (exec-checked-script
-     (str "Starting " script-name)
-     ~(forever script (dissoc options script-name)))
-    (exec-checked-script
-     (str "Stopping " script-name)
-     (forever ~script :max ~max :action :start))))
+      :start (stevedore/fragment
+              (~env-string forever --plain -m ~max start ~script))
+      :list (stevedore/fragment
+              ("forever" --plain list))
+      (stevedore/fragment
+       ("forever" --plain ~action ~script)))))
 
 ;;; # Service Supervisor Implementation
 (defmethod service-supervisor-available? :forever
@@ -148,7 +125,7 @@ abuse the service name to pass the executable script."
                      ~(forever service-name
                                (assoc (select-keys options [:max :env])
                                  :action :list))
-                     ("grep" "running")))
+                     ("grep" (quoted  ~service-name))))
              ~(forever service-name (assoc (select-keys options [:max :env])
                                       :action action))))
           (case action
@@ -160,7 +137,7 @@ abuse the service name to pass the executable script."
                        ~(forever service-name
                                  (assoc (select-keys options [:max :env])
                                    :action :list))
-                       ("grep" "running")))
+                       ("grep" (quoted ~service-name))))
                ~(forever service-name (assoc (select-keys options [:max :env])
                                         :action action))))
 
@@ -171,7 +148,7 @@ abuse the service name to pass the executable script."
              (if ((pipe ~(forever service-name
                                   (assoc (select-keys options [:max :env])
                                     :action :list))
-                        ("grep" "running")))
+                        ("grep" (quoted ~service-name))))
                ~(forever service-name (assoc (select-keys options [:max :env])
                                         :action action))))
 
