@@ -1,0 +1,7 @@
+{:header "forever"
+ :title "A pallet crate to install and configure forever."
+ :git-repo "https://github.com/pallet/forever-crate"
+ :api-docs "http://palletops.com/forever-crate/0.8/api"
+ :annotated-docs "http://palletops.com/forever-crate/0.8/annotated/uberdoc.html"
+ :tag-prefix ""
+ :versions [{:pallet "0.8.0-RC.3" :version "0.8.0-SNAPSHOT"}]}

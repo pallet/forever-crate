@@ -1,29 +1,65 @@
-# Pallet crate for forever
+[Repository](https://github.com/pallet/forever-crate) &#xb7;
+[Issues](https://github.com/pallet/forever-crate/issues) &#xb7;
+[API docs](http://palletops.com/forever-crate/0.8/api) &#xb7;
+[Annotated source](http://palletops.com/forever-crate/0.8/annotated/uberdoc.html) &#xb7;
+[Release Notes](https://github.com/pallet/forever-crate/blob/develop/ReleaseNotes.md)
 
-This a crate to install and run forever via
-[Pallet](http://pallet.github.com/pallet).
+A pallet crate to install and configure forever.
 
-[Release Notes](ReleaseNotes.md)
+### Dependency Information
 
-## Server Spec
+```clj
+:dependencies [[com.palletops/forever-crate "0.8.0-SNAPSHOT"]]
+```
 
-The forever crate defines the `forever` function, that takes a settings map and
-returns a server-spec for installing forever.
+### Releases
 
-## Settings
+<table>
+<thead>
+  <tr><th>Pallet</th><th>Crate Version</th><th>Repo</th><th>GroupId</th></tr>
+</thead>
+<tbody>
+  <tr>
+    <th>0.8.0-RC.3</th>
+    <td>0.8.0-SNAPSHOT</td>
+    <td>clojars</td>
+    <td>com.palletops</td>
+    <td><a href='https://github.com/pallet/forever-crate/blob/0.8.0-SNAPSHOT/ReleaseNotes.md'>Release Notes</a></td>
+    <td><a href='https://github.com/pallet/forever-crate/blob/0.8.0-SNAPSHOT/'>Source</a></td>
+  </tr>
+</tbody>
+</table>
 
-The `forever-settings` function takes the following settings:
+## Usage
 
-:version
-the version to install
+The `forever` configuration does not replace the system init as PID 1.
 
-The default install is via `npm`. node.js needs to be installed on the machine
-before this crate will function.
+The `server-spec` function provides a convenient pallet server spec for
+forever.  It takes a single map as an argument, specifying configuration
+choices, as described below for the `settings` function.  You can use this
+in your own group or server specs in the :extends clause.
 
-## Running services under forever
+```clj
+(require '[pallet.crate.forever :as forever])
+(group-spec my-forever-group
+  :extends [(forever/server-spec {})])
+```
 
-The `forever-service` function can be used to start and stop processes under
-forever's supervision.
+While `server-spec` provides an all-in-one function, you can use the individual
+plan functions as you see fit.
+
+The `settings` function provides a plan function that should be called in the
+`:settings` phase.  The function puts the configuration options into the pallet
+session, where they can be found by the other crate functions, or by other
+crates wanting to interact with forever.
+
+The `install` function is responsible for actually installing forever.
+
+The `configure` function writes the forever configuration file, using the form
+passed to the :config key in the `settings` function.
+
+To create a forever job, you can write a method for
+[`supervisor-config-map`](http://palletops.com/api/0.8/pallet.crate.service.html#var-supervisor-config-map).
 
 ## Support
 
@@ -34,4 +70,4 @@ forever's supervision.
 
 Licensed under [EPL](http://www.eclipse.org/legal/epl-v10.html)
 
-Copyright 2012 Hugo Duncan.
+Copyright 2013 Hugo Duncan.
