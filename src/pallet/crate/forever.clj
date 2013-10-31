@@ -1,156 +1,183 @@
 (ns pallet.crate.forever
   "Crate for forever installation and configuration.
 
-https://github.com/nodejitsu/forever"
+https://github.com/nodejitsu/forever
+
+With forever, there is no configuration file, so we
+abuse the service name to pass the executable script."
   (:require
    [clojure.string :as string]
-   [clojure.tools.logging :as logging]
-   [pallet.stevedore :as stevedore])
-  (:use
-   [pallet.action.exec-script :only [exec-checked-script]]
-   [pallet.action.package :only [packages]]
-   [pallet.common.context :only [throw-map]]
-   [pallet.core :only [server-spec]]
-   [pallet.parameter :only [assoc-target-settings get-target-settings]]
-   [pallet.phase :only [phase-fn]]
-   [pallet.thread-expr :only [when-> apply-map->]]
-   [pallet.utils :only [apply-map]]
+   [clojure.tools.logging :refer [debugf warn]]
+   [pallet.actions :refer [exec-checked-script package plan-when]]
+   [pallet.api :as api :refer [plan-fn]]
+   [pallet.crate
+    :refer [assoc-settings defmethod-plan get-settings target-flag?]]
+   [pallet.crate-install :as crate-install]
+   [pallet.crate.service
+    :refer [service-supervisor service-supervisor-available?
+            service-supervisor-config]]
+   [pallet.script.lib :refer [has-command?]]
+   [pallet.stevedore :as stevedore]
+   [pallet.utils :refer [apply-map deep-merge]]
    [pallet.version-dispatch
-    :only [defmulti-version-crate defmulti-version defmulti-os-crate
-           multi-version-session-method multi-version-method
-           multi-os-session-method]]
-   [pallet.versions :only [version-string as-version-vector]]))
+    :refer [defmethod-version-plan defmulti-version-plan]]
+   [pallet.versions :refer [version-string as-version-vector]]))
 
 ;;; ## forever install
 (def ^:dynamic *forever-defaults*
-  {:version "0.9.2"})
+  {:version "0.10.9"})
 
-;;; Based on supplied settings, decide which install strategy we are using
-;;; for forever.
+;;; # Settings
+;;;
+;;; Use npm to install forever
+;;;
+;;; Links:
+;;; https://github.com/nodejitsu/forever
+(defmulti-version-plan default-settings [version])
 
-(defmulti-version-crate forever-version-settings [version session settings])
-
-(multi-version-session-method
-    forever-version-settings {:os :linux}
-    [os os-version version session settings]
-  (cond
-    (:strategy settings) settings
-    (:npm settings) (assoc settings :strategy :npm)
-    :else (assoc settings :strategy :npm :npm nil)))
-
-(multi-version-session-method
-    forever-version-settings {:os :ubuntu :os-version [12]}
-    [os os-version version session settings]
-  (cond
-    (:strategy settings) settings
-    (:npm settings) (assoc settings :strategy :npm)
-    :else (assoc settings
-            :strategy :npm
-            :npm {:packages {:aptitude ["libssl0.9.8"]}})))
+(defmethod-version-plan
+  default-settings {:os :linux}
+  [os os-version version]
+  {:version (version-string version)
+   :install-strategy ::npm
+   :packages ["forever"]
+   :global true})
 
 ;;; ## Settings
-(defn- settings-map
-  "Dispatch to either openjdk or oracle settings"
-  [session settings]
-  (forever-version-settings
-   session
-   (as-version-vector (:version settings))
-   (merge *forever-defaults* settings)))
-
-(defn forever-settings
+(defn settings
   "Capture settings for forever
-:version
-:download
-:deb"
-  [session {:keys [version download deb instance-id]
-            :or {version (:version *forever-defaults*)}
-            :as settings}]
-  (let [settings (settings-map session (merge {:version version} settings))]
-    (assoc-target-settings session :forever instance-id settings)))
+:version"
+  [{:keys [version instance-id]
+    :or {version (:version *forever-defaults*)}
+    :as settings}]
+  (let [settings (deep-merge (default-settings version) settings)]
+    (debugf "forever settings %s" settings)
+    (assoc-settings :forever settings {:instance-id instance-id})))
 
 ;;; # Install
 
 ;;; Dispatch to install strategy
-(defmulti install-method (fn [session settings] (:strategy settings)))
+(defmethod-plan crate-install/install ::npm
+  [facility instance-id]
+  (let [{:keys [version] :as settings}
+        (get-settings :forever {:instance-id instance-id})]
+     (exec-checked-script
+      "Install forever"
+      (if (~has-command? forever)
+        ;; there doesn't seem to be a way of checking the forever version
+        (println "forever already installed, skipping")
+        ("npm" "--parseable" "--color" false
+         install (str "forever@" ~version) -g --quiet -y)))))
 
-(defmethod install-method :npm
-  [session {:keys [version npm]}]
-  (->
-   session
-   (when-> (:packages npm)
-     (apply-map-> packages (:packages npm)))
-   (exec-checked-script
-    "Install forever"
-    (npm install (str "forever@" ~version) -g --quiet -y))))
+(defn install
+  "Install forever. By default from npm."
+  [{:keys [instance-id]}]
+  (crate-install/install :forever instance-id))
 
-(defn install-forever
-  "Install forever. By default will build from source."
-  [session & {:keys [instance-id]}]
-  (let [settings (get-target-settings
-                  session :forever instance-id ::no-settings)]
-    (logging/debugf "install-forever settings %s" settings)
-    (if (= settings ::no-settings)
-      (throw-map
-       "Attempt to install forever without specifying settings"
-       {:message "Attempt to install forever without specifying settings"
-        :type :invalid-operation})
-      (install-method session settings))))
-
-;;; # Forever based service
-(defn forever-index [script]
-  (stevedore/script
-   (pipe
-    (forever list)
-    (awk (str "'{ if ( $5 ~ /"
-              ~script
-              "/ ) { print substr( $2, 2, length( $2 ) - 2 ) } }'")))))
-
-(defn forever-service
-  "Operate a service via forever:
-
-:user   the user to run under
-:dir    the working directory for the code
-:action either :start or :stop"
-  [session script & {:keys [action max dir instance-id script-name user]
-                     :or {action :start max 1 script-name "forever script"}}]
-  (let [{:keys [home user] :as settings}
-        (get-target-settings session :vblob instance-id ::no-settings)]
+(defn forever
+  "Return a forever command for the specified arguments"
+  [script {:keys [action max env instance-id]
+           :or {action :start max 1}}]
+  (let [env-string (string/join " " (map (fn [[var val]]
+                                           (str (name var) "=\"" val "\""))
+                                         env))]
     (case action
-      :start
-      (exec-checked-script
-       session
-       (str "Starting " script-name)
-       ~(if user
-          (stevedore/script
-           (sudo -n -H -u ~user sh -c
-                 (quoted
-                  (do
-                    "("
-                    ~(if dir (stevedore/script (cd ~dir)) "")
-                    (forever -m ~max start ~script)
-                    ")"))))
-          (stevedore/script
-           "("
-           ~(if dir (stevedore/script (cd ~dir)) "")
-           (forever -m ~max start ~script)
-           ")")))
-      :stop
-      (exec-checked-script
-       session
-       (str "Stopping " script-name)
-       ~(if user
-          (stevedore/script
-           (sudo -n -H -u ~user sh -c (quoted
-                                       (pipe ~(forever-index script)
-                                             (xargs forever stop)))))
-          (stevedore/script
-           (pipe ~(forever-index script)
-                 (xargs forever stop))))))))
+      :start (stevedore/fragment
+              (~env-string forever --plain -m ~max start ~script))
+      :list (stevedore/fragment
+              ("forever" --plain list))
+      (stevedore/fragment
+       ("forever" --plain ~action ~script)))))
+
+;;; # Service Supervisor Implementation
+(defmethod service-supervisor-available? :forever
+  [_]
+  true)
+
+(defmethod service-supervisor-config :forever
+  [_
+   {:keys [] :as service-options}
+   {:keys [instance-id] :as options}]
+  (comment "Do nothing, there is no configuration file"))
+
+(defmethod service-supervisor :forever
+  [_
+   {:keys [service-name]}
+   {:keys [action if-flag if-stopped max env script-name instance-id]
+    :or {action :start
+         script-name service-name}
+    :as options}]
+  (let []
+    (case action
+      :enable (comment "Nothing to do here")
+      :disable  (comment "Nothing to do here")
+      :start-stop (comment "Nothing to do here")
+      (if if-flag
+        (plan-when (target-flag? if-flag)
+          (exec-checked-script
+           (str (name action) " " script-name)
+           ~(forever service-name (assoc (select-keys options [:max :env])
+                                    :action action))))
+        (if if-stopped
+          (exec-checked-script
+           (str (name action) " " service-name)
+           (if-not ((pipe
+                     ~(forever service-name
+                               (assoc (select-keys options [:max :env])
+                                 :action :list))
+                     ("grep" (quoted  ~service-name))))
+             ~(forever service-name (assoc (select-keys options [:max :env])
+                                      :action action))))
+          (case action
+            ;; forever reports an error if we try starting when already running
+            :start
+            (exec-checked-script
+             (str (name action) " " service-name)
+             (if-not ((pipe
+                       ~(forever service-name
+                                 (assoc (select-keys options [:max :env])
+                                   :action :list))
+                       ("grep" (quoted ~service-name))))
+               ~(forever service-name (assoc (select-keys options [:max :env])
+                                        :action action))))
+
+            ;; forever reports an error if we try stopping when not running
+            :stop
+            (exec-checked-script
+             (str (name action) " " service-name)
+             (if ((pipe ~(forever service-name
+                                  (assoc (select-keys options [:max :env])
+                                    :action :list))
+                        ("grep" (quoted ~service-name))))
+               ~(forever service-name (assoc (select-keys options [:max :env])
+                                        :action action))))
+
+            ;; forever reports an error if we try restarting when not running
+            :restart
+            (exec-checked-script
+             (str (name action) " " service-name)
+             (if ((pipe
+                   ~(forever service-name
+                             (assoc (select-keys options [:max :env])
+                               :action :list))
+                   ("grep" (quoted ~service-name))))
+               ~(forever service-name (assoc (select-keys options [:max :env])
+                                        :action action))
+               ~(forever service-name (assoc (select-keys options [:max :env])
+                                        :action :start))))
+
+            ;; otherwise, just perform the action
+            (exec-checked-script
+             (str (name action) " " service-name)
+             ~(forever service-name (assoc (select-keys options [:max :env])
+                                      :action action)))))))))
 
 ;;; # Server spec
-(defn forever
+(defn server-spec
   "Returns a service-spec for installing forever."
-  [settings]
-  (server-spec
-   :phases {:settings (phase-fn (forever-settings settings))
-            :configure (phase-fn (install-forever))}))
+  [{:keys [instance-id] :as settings}]
+  (api/server-spec
+   :phases {:settings (plan-fn
+                        (pallet.crate.forever/settings settings))
+            :configure (plan-fn
+                         (install {:instance-id instance-id}))}))

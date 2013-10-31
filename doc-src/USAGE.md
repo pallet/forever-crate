@@ -1,35 +1,3 @@
-[Repository](https://github.com/pallet/forever-crate) &#xb7;
-[Issues](https://github.com/pallet/forever-crate/issues) &#xb7;
-[API docs](http://palletops.com/forever-crate/0.8/api) &#xb7;
-[Annotated source](http://palletops.com/forever-crate/0.8/annotated/uberdoc.html) &#xb7;
-[Release Notes](https://github.com/pallet/forever-crate/blob/develop/ReleaseNotes.md)
-
-A pallet crate to install and configure forever.
-
-### Dependency Information
-
-```clj
-:dependencies [[com.palletops/forever-crate "0.8.0-alpha.1"]]
-```
-
-### Releases
-
-<table>
-<thead>
-  <tr><th>Pallet</th><th>Crate Version</th><th>Repo</th><th>GroupId</th></tr>
-</thead>
-<tbody>
-  <tr>
-    <th>0.8.0-RC.4</th>
-    <td>0.8.0-alpha.1</td>
-    <td>clojars</td>
-    <td>com.palletops</td>
-    <td><a href='https://github.com/pallet/forever-crate/blob/0.8.0-alpha.1/ReleaseNotes.md'>Release Notes</a></td>
-    <td><a href='https://github.com/pallet/forever-crate/blob/0.8.0-alpha.1/'>Source</a></td>
-  </tr>
-</tbody>
-</table>
-
 ## Usage
 
 The `forever` configuration does not replace the system init as PID 1.
@@ -60,14 +28,3 @@ passed to the :config key in the `settings` function.
 
 To create a forever job, you can write a method for
 [`supervisor-config-map`](http://palletops.com/api/0.8/pallet.crate.service.html#var-supervisor-config-map).
-
-## Support
-
-[On the group](http://groups.google.com/group/pallet-clj), or
-[#pallet](http://webchat.freenode.net/?channels=#pallet) on freenode irc.
-
-## License
-
-Licensed under [EPL](http://www.eclipse.org/legal/epl-v10.html)
-
-Copyright 2013 Hugo Duncan.
