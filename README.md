@@ -9,7 +9,7 @@ A pallet crate to install and configure forever.
 ### Dependency Information
 
 ```clj
-:dependencies [[com.palletops/forever-crate "0.8.0-alpha.1"]]
+:dependencies [[com.palletops/forever-crate "0.8.0-alpha.2"]]
 ```
 
 ### Releases
@@ -21,11 +21,11 @@ A pallet crate to install and configure forever.
 <tbody>
   <tr>
     <th>0.8.0-RC.4</th>
-    <td>0.8.0-alpha.1</td>
+    <td>0.8.0-alpha.2</td>
     <td>clojars</td>
     <td>com.palletops</td>
-    <td><a href='https://github.com/pallet/forever-crate/blob/0.8.0-alpha.1/ReleaseNotes.md'>Release Notes</a></td>
-    <td><a href='https://github.com/pallet/forever-crate/blob/0.8.0-alpha.1/'>Source</a></td>
+    <td><a href='https://github.com/pallet/forever-crate/blob/0.8.0-alpha.2/ReleaseNotes.md'>Release Notes</a></td>
+    <td><a href='https://github.com/pallet/forever-crate/blob/0.8.0-alpha.2/'>Source</a></td>
   </tr>
 </tbody>
 </table>
