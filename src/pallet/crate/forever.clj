@@ -76,16 +76,23 @@ abuse the service name to pass the executable script."
 
 (defn forever
   "Return a forever command for the specified arguments"
-  [script {:keys [action max env instance-id]
+  [script {:keys [action max env instance-id logfile outfile errfile append]
            :or {action :start max 1}}]
   (let [env-string (string/join " " (map (fn [[var val]]
                                            (str (name var) "=\"" val "\""))
                                          env))]
     (case action
       :start (stevedore/fragment
-              (~env-string forever --plain -m ~max start ~script))
+              (~env-string "forever" --debug --plain -m ~max
+               ~(if logfile (str "-l " logfile) "")
+               ~(if outfile (str "-o " outfile) "")
+               ~(if errfile (str "-e " errfile) "")
+               ~(if append (str "-a") "")
+               start ~script))
+      :restart (stevedore/fragment
+                (~env-string "forever" --debug --plain -m ~max restart ~script))
       :list (stevedore/fragment
-              ("forever" --plain list))
+             ("forever" --plain list))
       (stevedore/fragment
        ("forever" --plain ~action ~script)))))
 
@@ -100,6 +107,8 @@ abuse the service name to pass the executable script."
    {:keys [instance-id] :as options}]
   (comment "Do nothing, there is no configuration file"))
 
+(def option-keys [:max :env :logfile :outfile :errfile :append])
+
 (defmethod service-supervisor :forever
   [_
    {:keys [service-name]}
@@ -107,70 +116,70 @@ abuse the service name to pass the executable script."
     :or {action :start
          script-name service-name}
     :as options}]
-  (let []
-    (case action
-      :enable (comment "Nothing to do here")
-      :disable  (comment "Nothing to do here")
-      :start-stop (comment "Nothing to do here")
-      (if if-flag
-        (plan-when (target-flag? if-flag)
-          (exec-checked-script
-           (str (name action) " " script-name)
-           ~(forever service-name (assoc (select-keys options [:max :env])
+  (case action
+    :enable (comment "Nothing to do here")
+    :disable  (comment "Nothing to do here")
+    :start-stop (comment "Nothing to do here")
+    (if if-flag
+      (plan-when (target-flag? if-flag)
+        (exec-checked-script
+         (str (name action) " " script-name)
+         ~(forever service-name (assoc (select-keys options option-keys)
+                                  :action action))))
+      (if if-stopped
+        (exec-checked-script
+         (str (name action) " " service-name)
+         (if-not ((pipe
+                   ~(forever service-name
+                             (assoc (select-keys options option-keys)
+                               :action :list))
+                   ("grep" (quoted  ~service-name))))
+           ~(forever service-name (assoc (select-keys options option-keys)
                                     :action action))))
-        (if if-stopped
+        (case action
+          ;; forever reports an error if we try starting when already running
+          :start
           (exec-checked-script
            (str (name action) " " service-name)
            (if-not ((pipe
                      ~(forever service-name
-                               (assoc (select-keys options [:max :env])
+                               (assoc (select-keys options option-keys)
                                  :action :list))
-                     ("grep" (quoted  ~service-name))))
-             ~(forever service-name (assoc (select-keys options [:max :env])
+                     ("grep" (quoted ~service-name))))
+             ~(forever service-name (assoc (select-keys options
+                                                        option-keys)
                                       :action action))))
-          (case action
-            ;; forever reports an error if we try starting when already running
-            :start
-            (exec-checked-script
-             (str (name action) " " service-name)
-             (if-not ((pipe
-                       ~(forever service-name
-                                 (assoc (select-keys options [:max :env])
-                                   :action :list))
-                       ("grep" (quoted ~service-name))))
-               ~(forever service-name (assoc (select-keys options [:max :env])
-                                        :action action))))
 
-            ;; forever reports an error if we try stopping when not running
-            :stop
-            (exec-checked-script
-             (str (name action) " " service-name)
-             (if ((pipe ~(forever service-name
-                                  (assoc (select-keys options [:max :env])
-                                    :action :list))
-                        ("grep" (quoted ~service-name))))
-               ~(forever service-name (assoc (select-keys options [:max :env])
-                                        :action action))))
+          ;; forever reports an error if we try stopping when not running
+          :stop
+          (exec-checked-script
+           (str (name action) " " service-name)
+           (if ((pipe ~(forever service-name
+                                (assoc (select-keys options option-keys)
+                                  :action :list))
+                      ("grep" (quoted ~service-name))))
+             ~(forever service-name (assoc (select-keys options option-keys)
+                                      :action action))))
 
-            ;; forever reports an error if we try restarting when not running
-            :restart
-            (exec-checked-script
-             (str (name action) " " service-name)
-             (if ((pipe
-                   ~(forever service-name
-                             (assoc (select-keys options [:max :env])
-                               :action :list))
-                   ("grep" (quoted ~service-name))))
-               ~(forever service-name (assoc (select-keys options [:max :env])
-                                        :action action))
-               ~(forever service-name (assoc (select-keys options [:max :env])
-                                        :action :start))))
+          ;; forever reports an error if we try restarting when not running
+          :restart
+          (exec-checked-script
+           (str (name action) " " service-name)
+           (if ((pipe
+                 ~(forever service-name
+                           (assoc (select-keys options option-keys)
+                             :action :list))
+                 ("grep" (quoted ~service-name))))
+             ~(forever service-name (assoc (select-keys options option-keys)
+                                      :action action))
+             ~(forever service-name (assoc (select-keys options option-keys)
+                                      :action :start))))
 
-            ;; otherwise, just perform the action
-            (exec-checked-script
-             (str (name action) " " service-name)
-             ~(forever service-name (assoc (select-keys options [:max :env])
-                                      :action action)))))))))
+          ;; otherwise, just perform the action
+          (exec-checked-script
+           (str (name action) " " service-name)
+           ~(forever service-name (assoc (select-keys options option-keys)
+                                    :action action))))))))
 
 ;;; # Server spec
 (defn server-spec

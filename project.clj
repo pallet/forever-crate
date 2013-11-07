@@ -1,4 +1,4 @@
-(defproject com.palletops/forever-crate "0.8.0-alpha.1"
+(defproject com.palletops/forever-crate "0.8.0-alpha.2"
   :description "Crate for Forever installation"
   :url "http://github.com/pallet/forever-crate"
   :license {:name "Eclipse Public License"
